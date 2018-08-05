@@ -1,0 +1,10 @@
+[Unit]
+After=local-fs.target network.target
+Description=Refresh letsencrypt certificates
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/le-dns
+ExecStart=/opt/le-dns/dehydrated -f config -c -x
+User=root
+Group=root

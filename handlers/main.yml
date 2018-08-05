@@ -1,0 +1,9 @@
+---
+  - name: reload
+    become: True
+    command: systemctl daemon-reload
+    notify: restart timer
+
+  - name: restart timer
+    become: True
+    service: name=le-dns.timer state=restarted enabled=yes

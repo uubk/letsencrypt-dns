@@ -1,0 +1,127 @@
+#!/bin/bash
+
+set -e
+set -u
+set -o pipefail
+
+kdestroy
+{% if ledns_krb_apkinit %}
+kinit -n @{{ ledns_krb_realm }}
+kinit -T $(klist|grep cache:|cut -d' ' -f3-) -k -t /etc/krb5.keytab host/{{ ansible_fqdn }}
+{% else %}
+kinit -k -t /etc/krb5.keytab host/{{ ansible_fqdn }}
+{% endif %}
+
+NSUPDATE="nsupdate -g"
+DNSSERVER="{{ ledns_servers|random }}"
+TTL=60
+
+case "$1" in
+    "deploy_challenge")
+{% if ledns_tlsa_enabled %}
+        if [ -f "certs/${2}/cert.pem" ] ; then
+            HASH="$(openssl x509 -in certs/${2}/cert.pem -outform DER | openssl sha256 | awk '{print $2}')"
+            echo "Old TLSA HASH (${HASH}) saved"
+            echo "${HASH}" > "${2}.tlsa.old"
+        fi
+{% endif %}
+        printf "server %s\nupdate add _acme-challenge.%s %d in TXT \"%s\"\nsend\n" "${DNSSERVER}" "${2}" "${TTL}" "${4}" | $NSUPDATE
+        sleep 30
+        set +e
+        echo -n "Wait until record is visible."
+        while [ 1 -eq 1 ] ; do
+            echo -n "."
+            RES=$(dig @{{ ledns_check_server }} TXT "_acme-challenge.${2}" | grep -e^_acme | grep "${4}")
+            if [ -n "${RES}" ] ; then
+                echo " done!"
+                break;
+            fi
+            sleep 60
+        done
+        sleep 60
+        ;;
+    "clean_challenge")
+        printf "server %s\nupdate delete _acme-challenge.%s TXT\nsend\n" "${DNSSERVER}" "${2}" | $NSUPDATE
+        ;;
+    "deploy_cert")
+{% if ledns_tlsa_enabled %}
+        # Take care of TLSA
+{% for host in ledns_self %}
+        HASH="$(openssl x509 -in ${4} -outform DER | openssl sha256 | awk '{print $2}')"
+        SHORTHASH="$(echo $HASH | head -c50 | tr '[:lower:]' '[:upper:]')"
+{% for item in ledns_tlsa_services %}
+        printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 1 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
+{% endfor %}
+{% for item in ledns_tlsa_services %}
+        echo "TLSA Record {{ item }}.{{ host }}, shorthash: ${SHORTHASH}"
+        printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 1 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
+        echo -n "Wait until record is visible."
+        set +e
+        while [ 1 -eq 1 ] ; do
+            echo -n "."
+            RES=$(dig @{{ ledns_check_server }} TLSA "{{ item }}.{{ host }}" | grep -e^{{ item }} | grep "$SHORTHASH")
+            if [ -n "${RES}" ] ; then
+                echo " done!"
+                break;
+            fi
+            sleep 60
+        done
+{% endfor %}
+{% endfor %}
+        echo "New records public, waiting one TTL to be sure..."
+        sleep 60
+        set -e
+{% endif %}
+        # Deploy cert
+{% for domain in ledns_cert_targets %}
+        if [ "${2}" = "{{ domain }}" ] ; then
+            echo "Detected {{ domain }}, installing cert..."
+{% for item in ledns_cert_targets[domain] %}
+{% if item.full is defined %}
+            cat "${3}" "${4}" "${6}" > {{ item.full}}
+            chown {{ item.owner }}:{{ item.group }} {{ item.full }}
+            chmod {{ item.mode }} {{ item.full }}
+{% endif %}
+{% if item.chain is defined %}
+            cp "${5}" "{{ item.chain }}"
+            cp "${3}" "{{ item.key }}"
+            chown {{ item.owner }}:{{ item.group }} {{ item.chain }}
+            chmod {{ item.mode }} {{ item.chain }}
+            chown {{ item.owner }}:{{ item.group }} {{ item.key }}
+            chmod {{ item.mode }} {{ item.key }}
+{% endif %}
+{% if item.exec is defined %}
+            {{ item.exec }}
+{% endif %}
+{% endfor %}
+{% endfor %}
+        fi
+{% if ledns_tlsa_enabled %}
+        echo "New records public, services restarted, waiting one TTL to be sure..."
+        sleep 60
+        if [ -f "${2}.tlsa.old" ] ; then
+            echo "Deleting old TLSA records"
+            OLDHASH="$(cat ${2}.tlsa.old | tr '[:lower:]' '[:upper:]')"
+{% for host in ledns_self %}
+{% for item in ledns_tlsa_services %}
+            printf "server %s\nupdate delete {{ item }}.{{ host }} %d in TLSA 1 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${OLDHASH}" | $NSUPDATE
+{% endfor %}
+{% endfor %}
+{% endif %}
+        fi
+        ;;
+    "unchanged_cert")
+        # do nothing for now
+        ;;
+    "startup_hook")
+        # do nothing for now
+        ;;
+    "exit_hook")
+        # do nothing for now
+        ;;
+esac
+
+kdestroy
+
+exit 0
+/* vim: set ts=8 sw=8 tw=0 et :*/

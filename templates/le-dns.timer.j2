@@ -1,0 +1,8 @@
+[Unit]
+Description=Refresh letsencrypt certificates regularly
+
+[Timer]
+OnCalendar=*-*-* {{ ledns_timing }}
+
+[Install]
+WantedBy=timers.target

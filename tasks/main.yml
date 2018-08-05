@@ -1,0 +1,48 @@
+---
+  - name: Create installation directory
+    become: True
+    file:
+      path: /opt/le-dns
+      state: directory
+      owner: root
+      group: root
+      mode: 0750
+
+  - name: Install dehydrated
+    become: True
+    get_url:
+      url: https://github.com/lukas2511/dehydrated/raw/10d4b98e7f1e2c5e0e5b16b0896aa7180e5a88f5/dehydrated
+      dest: /opt/le-dns/dehydrated
+      owner: root
+      group: root
+      mode: 0755
+      sha256sum: de317102f0e00713483b55bcb323b7400575dabb4c311338d3c7e5f649c0fb9e
+
+  - name: Upload hook and configuration
+    become: True
+    template:
+      src: "{{ item.name }}.j2"
+      dest: "/opt/le-dns/{{ item.name }}"
+      owner: root
+      group: root
+      mode: "{{ item.mode }}"
+    with_items:
+      - name: dnshook.sh
+        mode: '0750'
+      - name: domains.txt
+        mode: '0640'
+      - name: config
+        mode: '0640'
+
+  - name: Upload le-dns service and timer
+    become: True
+    template:
+      src: "{{ item }}.j2"
+      dest: "/etc/systemd/system/{{ item }}"
+      owner: root
+      group: root
+      mode: 0644
+    notify: reload
+    with_items:
+      - le-dns.service
+      - le-dns.timer

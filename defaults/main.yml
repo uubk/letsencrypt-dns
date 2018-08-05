@@ -1,0 +1,40 @@
+---
+ledns_tlsa_enabled: True
+ledns_tlsa_services:
+  - '_443._tcp'
+  - '_25._tcp'
+  - '_465._tcp'
+  - '_587._tcp'
+  - '_143._tcp'
+  - '_993._tcp'
+ledns_base: None
+ledns_check_server: None
+ledns_domains: "{{ ledns_base }} *.{{ ledns_base }}"
+# https://acme-v02.api.letsencrypt.org/directory
+ledns_ca: "https://acme-staging-v02.api.letsencrypt.org/directory"
+# 4096
+ledns_keysize: 384
+# rsa
+ledns_keytype: secp384r1
+ledns_self:
+  - "{{ ansible_fqdn }}"
+ledns_timing: "0,8,16:00:00"
+ledns_krb_realm: None
+# Use anonymous PKINIT for FAST?
+ledns_krb_apkinit: True
+ledns_servers: False
+
+ledns_cert_targets: False
+  #  - name: dovecot
+  #    key: /etc/dovecot/server.key
+  #    chain: /etc/dovecot/server.pem
+  #    owner: root
+  #    group: root
+  #    mode: 640
+  #    exec: systemctl restart dovecot
+  #  - name: haproxy
+  #    full: /etc/haproxy/pub.pem
+  #    owner: root
+  #    group: root
+  #    mode: 640
+  #    exec: systemctl restart haproxy
