@@ -1,0 +1,11 @@
+#!/bin/bash
+
+kdestroy
+{% if ledns_krb_apkinit %}
+kinit -n @{{ ledns_krb_realm }}
+kinit -T $(klist|grep cache:|cut -d' ' -f3-) -k -t /etc/krb5.keytab host/{{ ansible_fqdn }}
+{% else %}
+kinit -k -t /etc/krb5.keytab host/{{ ansible_fqdn }}
+{% endif %}
+
+nsupdate -g

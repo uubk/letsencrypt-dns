@@ -4,6 +4,9 @@ set -e
 set -u
 set -o pipefail
 
+{% if ledns_delegate_to_remote is defined %}
+# Skipping KRB setup
+{% else %}
 kdestroy
 {% if ledns_krb_apkinit %}
 kinit -n @{{ ledns_krb_realm }}
@@ -11,8 +14,13 @@ kinit -T $(klist|grep cache:|cut -d' ' -f3-) -k -t /etc/krb5.keytab host/{{ ansi
 {% else %}
 kinit -k -t /etc/krb5.keytab host/{{ ansible_fqdn }}
 {% endif %}
+{% endif %}
 
+{% if ledns_delegate_to_remote is defined %}
+NSUPDATE="ssh root@{{ ledns_delegate_to_remote }} /opt/le-dns/upddns.sh"
+{% else %}
 NSUPDATE="nsupdate -g"
+{% endif %}
 DNSSERVER="{{ ledns_servers|random }}"
 TTL=60
 

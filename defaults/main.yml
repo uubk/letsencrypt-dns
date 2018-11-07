@@ -24,6 +24,9 @@ ledns_krb_realm: None
 ledns_krb_apkinit: True
 ledns_servers: False
 
+ledns_provide_remote: False
+#ledns_delegate_to_remote:
+
 ledns_cert_targets: False
   #  - name: dovecot
   #    key: /etc/dovecot/server.key

@@ -8,6 +8,16 @@
       group: root
       mode: 0750
 
+  - name: Create delegation script
+    become: True
+    when: ledns_provide_remote
+    template:
+      src: upddns.sh.j2
+      dest: /opt/le-dns/upddns.sh
+      owner: root
+      group: root
+      mode: 0750
+
   - name: Install dehydrated
     become: True
     get_url:
