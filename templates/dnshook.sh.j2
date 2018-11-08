@@ -17,7 +17,7 @@ kinit -k -t /etc/krb5.keytab host/{{ ansible_fqdn }}
 {% endif %}
 
 {% if ledns_delegate_to_remote is defined %}
-NSUPDATE="ssh root@{{ ledns_delegate_to_remote }} /opt/le-dns/upddns.sh"
+NSUPDATE="ssh {{ ledns_remote_user }}@{{ ledns_delegate_to_remote }} /opt/le-dns/upddns.sh"
 {% else %}
 NSUPDATE="nsupdate -g"
 {% endif %}

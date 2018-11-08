@@ -21,6 +21,9 @@ This role assumes that each host has a principal `host/fqdn@REALM` in `/etc/krb5
 | `ledns_krb_apkinit` | `True` | Enable anonymous PKINIT for FAST? |
 | `ledns_servers` | `False` | List of servers the take nsupdates. A random one will be chosen at templating time |
 | `ledns_cert_targets` | `False` | A dict with installation instructions for the certificates, see below. |
+| `ledns_remote_user` | `ledns` | If renewing via a remote host, which user should be used for SSH? |
+| `ledns_provide_remote` | `False` | Whether to provide a script that supports remote renew, that is, tunneling all DNS update requests via SSH |
+| `ledns_delegate_to_remote` | unset | If set, tunnel all DNS requests via SSH to this host |
 
 ### `ledns_cert_targets`
 This variable contains a dict which maps domains (as in `ledns_base`) to installation instructions. Example:

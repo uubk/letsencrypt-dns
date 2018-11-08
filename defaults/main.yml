@@ -25,6 +25,7 @@ ledns_krb_apkinit: True
 ledns_servers: False
 
 ledns_provide_remote: False
+ledns_remote_user: ledns
 #ledns_delegate_to_remote:
 
 ledns_cert_targets: False

@@ -1,4 +1,13 @@
 ---
+  - name: Install dependencies
+    become: True
+    apt:
+      state: present
+      update_cache: yes
+      cache_valid_time: 1800
+      name:
+        - dnsutils
+
   - name: Create installation directory
     become: True
     file:
