@@ -1,6 +1,7 @@
 ---
   - name: reload
     become: True
+    service:
       name: le-dns.timer
       state: restarted
       enabled: yes
