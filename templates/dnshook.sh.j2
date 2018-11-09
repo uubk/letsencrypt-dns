@@ -7,7 +7,7 @@ set -o pipefail
 {% if ledns_delegate_to_remote is defined %}
 # Skipping KRB setup
 {% else %}
-kdestroy
+kdestroy > /dev/null
 {% if ledns_krb_apkinit %}
 kinit -n @{{ ledns_krb_realm }}
 kinit -T $(klist|grep cache:|cut -d' ' -f3-) -k -t /etc/krb5.keytab host/{{ ansible_fqdn }}
@@ -24,11 +24,37 @@ NSUPDATE="nsupdate -g"
 DNSSERVER="{{ ledns_servers|random }}"
 TTL=60
 
+function deployCert() {
+{% for domain in ledns_cert_targets %}
+        if [ "${2}" = "{{ domain }}" ] ; then
+            echo "Detected {{ domain }}, installing cert..."
+{% for item in ledns_cert_targets[domain] %}
+{% if item.full is defined %}
+            cat "${3}" "${4}" "${6}" > {{ item.full}}
+            chown {{ item.owner }}:{{ item.group }} {{ item.full }}
+            chmod {{ item.mode }} {{ item.full }}
+{% endif %}
+{% if item.chain is defined %}
+            cp "${5}" "{{ item.chain }}"
+            cp "${3}" "{{ item.key }}"
+            chown {{ item.owner }}:{{ item.group }} {{ item.chain }}
+            chmod {{ item.mode }} {{ item.chain }}
+            chown {{ item.owner }}:{{ item.group }} {{ item.key }}
+            chmod {{ item.mode }} {{ item.key }}
+{% endif %}
+{% if item.exec is defined %}
+            {{ item.exec }}
+{% endif %}
+{% endfor %}
+        fi
+{% endfor %}
+}
+
 case "$1" in
     "deploy_challenge")
 {% if ledns_tlsa_enabled %}
         if [ -f "certs/${2}/cert.pem" ] ; then
-            HASH=$(openssl x509 -in certs/${2}/cert.pem -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | hexdump -ve '/1 "%02x"')
+            HASH=$(openssl x509 -in certs/${2}/cert.pem -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | hexdump -ve '/1 "%02x"' | tr '[:lower:]' '[:upper:]')
             echo "Old TLSA HASH (${HASH}) saved"
             echo "${HASH}" > "${2}.tlsa.old"
         fi
@@ -54,19 +80,35 @@ case "$1" in
     "deploy_cert")
 {% if ledns_tlsa_enabled %}
         # Take care of TLSA
-{% for host in ledns_self %}
-        #HASH="$(openssl x509 -in ${4} -outform DER | openssl sha256 | awk '{print $2}')"
-        HASH=$(openssl x509 -in ${4} -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | hexdump -ve '/1 "%02x"')
+        # generate new hash
+        HASH=$(openssl x509 -in ${4} -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | hexdump -ve '/1 "%02x"' | tr '[:lower:]' '[:upper:]')
         SHORTHASH="$(echo $HASH | head -c50 | tr '[:lower:]' '[:upper:]')"
+        OLDHASH=""
+        echo "New TLSA hash: ${HASH}"
+        if [ -f "${2}.tlsa.old" ] ; then
+            OLDHASH="$(cat ${2}.tlsa.old | tr '[:lower:]' '[:upper:]')"
+            echo "Old TLSA hash: ${OLDHASH}"
+            if [ "${HASH}" = "${OLDHASH}" ] ; then
+                echo "TLSA hash didn't change, not modifying records"
+                deployCert "$@"
+                exit 0
+            fi
+        fi
+
+        # Deploy new TLSA records
+{% for host in ledns_self %}
+        # New TLSA records for {{ host }}
 {% for item in ledns_tlsa_services %}
         printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 1 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
 {% if item == "_25._tcp" %}
         printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 3 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
 {% endif %}
 {% endfor %}
+{% endfor %}
+        # Wait for new TLSA records to be public
+{% for host in ledns_self %}
 {% for item in ledns_tlsa_services %}
         echo "TLSA Record {{ item }}.{{ host }}, shorthash: ${SHORTHASH}"
-        # printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 1 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
         echo -n "Wait until record is visible."
         set +e
         while [ 1 -eq 1 ] ; do
@@ -85,35 +127,13 @@ case "$1" in
         set -e
 {% endif %}
         # Deploy cert
-{% for domain in ledns_cert_targets %}
-        if [ "${2}" = "{{ domain }}" ] ; then
-            echo "Detected {{ domain }}, installing cert..."
-{% for item in ledns_cert_targets[domain] %}
-{% if item.full is defined %}
-            cat "${3}" "${4}" "${6}" > {{ item.full}}
-            chown {{ item.owner }}:{{ item.group }} {{ item.full }}
-            chmod {{ item.mode }} {{ item.full }}
-{% endif %}
-{% if item.chain is defined %}
-            cp "${5}" "{{ item.chain }}"
-            cp "${3}" "{{ item.key }}"
-            chown {{ item.owner }}:{{ item.group }} {{ item.chain }}
-            chmod {{ item.mode }} {{ item.chain }}
-            chown {{ item.owner }}:{{ item.group }} {{ item.key }}
-            chmod {{ item.mode }} {{ item.key }}
-{% endif %}
-{% if item.exec is defined %}
-            {{ item.exec }}
-{% endif %}
-{% endfor %}
-{% endfor %}
-        fi
+        deployCert "$@"
 {% if ledns_tlsa_enabled %}
         echo "New records public, services restarted, waiting one TTL to be sure..."
         sleep 60
         if [ -f "${2}.tlsa.old" ] ; then
             echo "Deleting old TLSA records"
-            OLDHASH="$(cat ${2}.tlsa.old | tr '[:lower:]' '[:upper:]')"
+            echo "Oldhash: ${OLDHASH}"
 {% for host in ledns_self %}
 {% for item in ledns_tlsa_services %}
             printf "server %s\nupdate delete {{ item }}.{{ host }} %d in TLSA 1 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${OLDHASH}" | $NSUPDATE
@@ -136,7 +156,7 @@ case "$1" in
         ;;
 esac
 
-kdestroy
+kdestroy > /dev/null
 
 exit 0
-/* vim: set ts=8 sw=8 tw=0 et :*/
+/* vim: set ts=4 sw=4 tw=80 et :*/
