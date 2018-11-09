@@ -28,7 +28,7 @@ case "$1" in
     "deploy_challenge")
 {% if ledns_tlsa_enabled %}
         if [ -f "certs/${2}/cert.pem" ] ; then
-            HASH="$(openssl x509 -in certs/${2}/cert.pem -outform DER | openssl sha256 | awk '{print $2}')"
+            HASH=$(openssl x509 -in certs/${2}/cert.pem -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | hexdump -ve '/1 "%02x"')
             echo "Old TLSA HASH (${HASH}) saved"
             echo "${HASH}" > "${2}.tlsa.old"
         fi
@@ -55,14 +55,18 @@ case "$1" in
 {% if ledns_tlsa_enabled %}
         # Take care of TLSA
 {% for host in ledns_self %}
-        HASH="$(openssl x509 -in ${4} -outform DER | openssl sha256 | awk '{print $2}')"
+        #HASH="$(openssl x509 -in ${4} -outform DER | openssl sha256 | awk '{print $2}')"
+        HASH=$(openssl x509 -in ${4} -noout -pubkey | openssl pkey -pubin -outform DER | openssl dgst -sha256 -binary | hexdump -ve '/1 "%02x"')
         SHORTHASH="$(echo $HASH | head -c50 | tr '[:lower:]' '[:upper:]')"
 {% for item in ledns_tlsa_services %}
-        printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 1 0 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
+        printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 1 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
+{% if item == "_25._tcp" %}
+        printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 3 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
+{% endif %}
 {% endfor %}
 {% for item in ledns_tlsa_services %}
         echo "TLSA Record {{ item }}.{{ host }}, shorthash: ${SHORTHASH}"
-        printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 1 0 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
+        # printf "server %s\nupdate add {{ item }}.{{ host }} %d in TLSA 1 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${HASH}" | $NSUPDATE
         echo -n "Wait until record is visible."
         set +e
         while [ 1 -eq 1 ] ; do
@@ -112,7 +116,10 @@ case "$1" in
             OLDHASH="$(cat ${2}.tlsa.old | tr '[:lower:]' '[:upper:]')"
 {% for host in ledns_self %}
 {% for item in ledns_tlsa_services %}
-            printf "server %s\nupdate delete {{ item }}.{{ host }} %d in TLSA 1 0 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${OLDHASH}" | $NSUPDATE
+            printf "server %s\nupdate delete {{ item }}.{{ host }} %d in TLSA 1 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${OLDHASH}" | $NSUPDATE
+{% if item == "_25._tcp" %}
+            printf "server %s\nupdate delete {{ item }}.{{ host }} %d in TLSA 3 1 1 %s\nsend\n" "${DNSSERVER}" "${TTL}" "${OLDHASH}" | $NSUPDATE
+{% endif %}
 {% endfor %}
 {% endfor %}
 {% endif %}
