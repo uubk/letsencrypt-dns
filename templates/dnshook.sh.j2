@@ -65,7 +65,7 @@ case "$1" in
         echo -n "Wait until record is visible."
         while [ 1 -eq 1 ] ; do
             echo -n "."
-            RES=$(dig @{{ ledns_check_server }} TXT "_acme-challenge.${2}" | grep -e^_acme | grep "${4}")
+            RES=$(dig @{{ ledns_check_server }} TXT "_acme-challenge.${2}" | grep -e^_acme | grep -- "${4}")
             if [ -n "${RES}" ] ; then
                 echo " done!"
                 break;
@@ -113,7 +113,7 @@ case "$1" in
         set +e
         while [ 1 -eq 1 ] ; do
             echo -n "."
-            RES=$(dig @{{ ledns_check_server }} TLSA "{{ item }}.{{ host }}" | grep -e^{{ item }} | grep "$SHORTHASH")
+            RES=$(dig @{{ ledns_check_server }} TLSA "{{ item }}.{{ host }}" | grep -e^{{ item }} | grep -- "$SHORTHASH")
             if [ -n "${RES}" ] ; then
                 echo " done!"
                 break;
@@ -159,4 +159,3 @@ esac
 kdestroy 2> /dev/null
 
 exit 0
-/* vim: set ts=4 sw=4 tw=80 et :*/
