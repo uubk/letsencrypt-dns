@@ -42,6 +42,11 @@ function deployCert() {
             chown {{ item.owner }}:{{ item.group }} {{ item.key }}
             chmod {{ item.mode }} {{ item.key }}
 {% endif %}
+{% if item.pkcs12 is defined %}
+            openssl pkcs12 -export -in "${5}" -inkey "${3}" -out {{ item.pkcs12 }} -name {{ item.name }} -password pass:{{ item.password }}
+            chown {{ item.owner }}:{{ item.group }} {{ item.pkcs12 }}
+            chmod {{ item.mode }} {{ item.pkcs12 }}
+{% endif %}
 {% if item.exec is defined %}
             {{ item.exec }}
 {% endif %}
