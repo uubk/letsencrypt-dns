@@ -30,12 +30,12 @@
   - name: Install dehydrated
     become: True
     get_url:
-      url: https://github.com/lukas2511/dehydrated/raw/10d4b98e7f1e2c5e0e5b16b0896aa7180e5a88f5/dehydrated
+      url: https://github.com/lukas2511/dehydrated/raw/05eda91a2fbaed1e13c733230238fc68475c535e/dehydrated
       dest: /opt/le-dns/dehydrated
       owner: root
       group: root
       mode: 0755
-      sha256sum: de317102f0e00713483b55bcb323b7400575dabb4c311338d3c7e5f649c0fb9e
+      sha256sum: a97b0d64d5ecc21549a58b714bb9017479b38b2e40ff51c04f1638e71291d138
 
   - name: Upload hook and configuration
     become: True
