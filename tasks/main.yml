@@ -7,6 +7,14 @@
       cache_valid_time: 1800
       name:
         - dnsutils
+    when: ansible_distribution == "Debian"
+
+  - name: Install dependencies
+    become: True
+    package:
+      state: present
+      name: bind-tools
+    when: ansible_distribution == "Archlinux"
 
   - name: Create installation directory
     become: True
